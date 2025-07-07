@@ -1,0 +1,87 @@
+Concept 1: The Network Model (The "Map")
+
+Imagine the internet is a global postal service. For a letter to get from you to a friend in another country, it goes through several layers of processing (local post office, regional sorting hub, airplane, destination sorting hub, etc.). Computer networks work the same way, often described by the TCP/IP Model.
+
+For your ping project, you only need to care about two main layers:
+
+    Layer 3: The Internet Layer (The "Postal Service")
+
+        Protocol: IP (Internet Protocol)
+
+        Job: Its only job is to get a packet of data from a source IP address to a destination IP address. Think of it as the mailman who only cares about the address on the envelope, not what's inside. It handles the "routing" of the packet across the internet.
+
+        Key Feature: The IP Header. Every IP packet has a header containing the source IP, destination IP, and a crucial field for ping: the TTL (Time-To-Live).
+
+    Layer 3 Companion: The "Control" Protocol
+
+        Protocol: ICMP (Internet Control Message Protocol)
+
+        Job: This protocol runs alongside IP. It's not for sending user data like web pages or emails. Its purpose is for network devices (like your computer or routers) to send control and error messages to each other.
+
+        Analogy: If IP is the mailman delivering letters, ICMP is the official "Return to Sender" stamp or a "Recipient Not Found" notice that the postal service uses internally.
+
+    This is the core of ping! A ping is simply your computer sending an ICMP "Echo Request" message and waiting for the destination to send back an ICMP "Echo Reply" message. You are using the network's built-in control mechanism to test connectivity.
+
+Concept 2: Raw Sockets (The "Special Access Key")
+
+Normally, when you write a network program (like a web browser), you operate at a higher level (Layer 4, using TCP). You just give the operating system your data, and the OS handles creating the TCP and IP headers for you. It's convenient and safe.
+
+Your ping program cannot do this. You need to build an ICMP packet yourself. To do this, you need a Raw Socket.
+
+    What it is: A raw socket is a special programming interface that lets your application bypass the OS's normal protocol handling (like TCP/UDP) and directly build your own Layer 3 packets.
+
+    Analogy: A normal socket is like using a full-service post office. You give them your letter, and they do everything else. A raw socket is like having a key to the mail sorting room. You get to build the entire package yourself, writing the ICMP message, putting it in an IP envelope, and handing it directly to the mailman.
+
+    The Consequence: Because you have this low-level access, the OS will not help you much. You are now responsible for creating the ICMP header and calculating its checksum yourself.
+
+    The Security Implication: This is also why you need sudo (administrator privileges) to run your ft_ping. Allowing any program to create custom raw packets is a security risk (it's how many network attacks are crafted), so it's a protected operation. The call socket(AF_INET, SOCK_RAW, IPPROTO_ICMP) is you explicitly asking the kernel for this special, privileged access.
+
+Concept 3: DNS Resolution (The "Address Book")
+
+You know google.com, but computers on the internet only know IP addresses like 142.251.46.238.
+
+    What it is: The Domain Name System (DNS) is the internet's global address book. Its job is to translate human-friendly domain names into machine-readable IP addresses.
+
+    How it applies to you: The first thing your program must do is take the user's input (e.g., "google.com") and use DNS to find its IP address. The C function getaddrinfo() is your tool for querying this address book.
+
+Concept 4: The Internet Checksum (The "Tamper-Proof Seal")
+
+How does the receiving computer know that the packet it received is exactly the same as the one you sent, and wasn't corrupted along the way?
+
+    What it is: The checksum is a small value (16 bits) in the ICMP header. It's calculated based on the entire content of the ICMP message.
+
+    How it works (simplified): The sender runs a specific mathematical algorithm on the packet's data and puts the result in the checksum field. The receiver runs the exact same algorithm on the received data. If the results match, the packet is considered valid. If not, it's discarded.
+
+    How it applies to you: Because you are using a raw socket, the kernel will not calculate the checksum for you. You must write the C code to implement this standard algorithm yourself before you send the packet.
+
+Concept 5: Time To Live - TTL (The "Self-Destruct Counter")
+
+What happens if a packet gets stuck in a loop between two misconfigured routers on the internet? It would circle forever, congesting the network.
+
+    What it is: The TTL is a field in the IP Header. It's a number (e.g., 64). Every time a router forwards the packet, it subtracts 1 from the TTL.
+
+    How it works: If a router receives a packet with a TTL of 1, it will subtract 1 to get 0, discard the packet, and send an ICMP "Time Exceeded" message back to the original sender.
+
+    How it applies to you: This is a fantastic debugging tool, and it's what the subject mentions. If you set the TTL of your outgoing packet to 1, you will force an error. The first router your packet reaches will send back a "Time Exceeded" error. This tells you the IP address of your first "hop" on the internet! This is the fundamental principle behind the traceroute command.
+
+The Story of a Single Ping
+
+If you understand these concepts, you can see the whole story:
+
+    User: ./ft_ping google.com
+
+    Your Program (DNS): Asks the DNS "Address Book" for google.com's IP address. Gets back 142.251.46.238.
+
+    Your Program (Socket): Asks the OS for a "Special Access Key" (sudo required) to the network's control layer (socket(..., SOCK_RAW, IPPROTO_ICMP)).
+
+    Your Program (Crafting): In memory, it builds an ICMP Echo Request packet. It sets the type, id, and a sequence number. It then calculates the "Tamper-Proof Seal" (checksum).
+
+    Your Program (Sending): It hands this complete packet to the OS, telling it to send it to 142.251.46.238. The OS wraps it in an IP Header (with a default TTL) and sends it.
+
+    The Internet: Routers forward the packet, decrementing the TTL at each hop.
+
+    Google's Server: Receives the packet. It checks the IP header, then the ICMP checksum. If valid, it sees it's an "Echo Request." It crafts an ICMP "Echo Reply", setting the same id and sequence, calculates a new checksum, and sends it back to your IP.
+
+    Your Program (Receiving): Receives the reply. It validates it: Is this an ICMP packet? Is it an "Echo Reply"? Does the ID match my program's ID? If so, success! It calculates the round-trip time and prints the result.
+
+Master these five concepts, and the C code you need to write will feel like a logical translation of this story.

@@ -1,0 +1,194 @@
+Project Roadmap: ft_ping
+
+The project can be broken down into several logical phases. Don't try to do everything at once. Master each phase before moving to the next.
+Phase 0: Setup and Foundations
+
+This phase is about getting your environment and basic project structure in place.
+
+    Environment Setup:
+
+        Ensure your Debian VM is running and you can access it.
+
+        Install the necessary tools: sudo apt-get update && sudo apt-get install build-essential manpages-dev. The manpages-dev package is crucial as it gives you the developer documentation for system calls.
+
+    Project Structure:
+
+        Create a project directory (ft_ping/).
+
+        Inside, create a srcs/ directory for your .c files, an includes/ for your .h files, and a Makefile.
+
+    The Makefile:
+
+        Goal: Create a Makefile that can compile your program.
+
+        What to research:
+
+            Basic Makefile syntax: targets, dependencies, and commands.
+
+            Standard rules: all, clean, fclean, re.
+
+            Using variables: CC, CFLAGS, SRCS, OBJS.
+
+            Automatic dependency generation to ensure you only recompile files that have changed.
+
+Phase 1: Parsing Arguments and Resolving the Host
+
+Your program needs to understand what the user wants to ping.
+
+    Argument Parsing:
+
+        Goal: Read the command-line arguments (-v, -?, and the destination hostname/IP).
+
+        What to research:
+
+            How to access arguments in C (main function's argc and argv).
+
+            Simple argument parsing by looping through argv.
+
+            For the bonus flags later, you'll want to research getopt() or getopt_long(). For now, a simple loop is fine.
+
+    DNS Resolution:
+
+        Goal: Convert the user-provided hostname (e.g., "google.com") into an IP address (e.g., "142.251.46.238"). The program must also accept an IP address directly.
+
+        What to research:
+
+            The function getaddrinfo(). This is the modern, preferred way to handle name and service translation. It's powerful and can handle both IPv4 and IPv6.
+
+            The structures struct addrinfo and struct sockaddr. You will use getaddrinfo() to fill a struct addrinfo, which will contain a struct sockaddr with the destination IP.
+
+            How to handle the case where the user provides an IP address string. getaddrinfo() handles this for you automatically!
+
+            Key Concept: The subject says "handle FQDN without doing the DNS resolution in the packet return". This means you do the lookup once at the beginning to get the IP. When you receive a reply packet, you should print the IP address it came from, not try to look up its name.
+
+Phase 2: The Heart of Ping - Raw Sockets and ICMP
+
+This is the most complex and important part of the project.
+
+    Creating a Raw Socket:
+
+        Goal: Open a communication channel that gives you direct access to network protocols below TCP and UDP.
+
+        What to research:
+
+            The socket() system call.
+
+            You'll need a specific combination of arguments: socket(AF_INET, SOCK_RAW, IPPROTO_ICMP).
+
+            CRITICAL: Understand that creating a raw socket requires special privileges. You will need to run your program with sudo (sudo ./ft_ping google.com).
+
+    Crafting the ICMP Packet:
+
+        Goal: Create the "ECHO_REQUEST" message in memory that you will send.
+
+        What to research:
+
+            The ICMP Header structure. Look for struct icmphdr in <netinet/ip_icmp.h>.
+
+            The key fields you must set:
+
+                type: Set to ICMP_ECHO (Echo Request).
+
+                code: Set to 0.
+
+                id: A unique ID to identify your ping packets. A great choice is the program's process ID, which you can get with getpid().
+
+                sequence: A number that you will increment for each packet you send (0, 1, 2, ...).
+
+                checksum: This is the tricky part.
+
+    Calculating the ICMP Checksum:
+
+        Goal: Implement the Internet Checksum algorithm. The kernel will not do this for you on a raw socket.
+
+        What to research:
+
+            The "Internet Checksum" algorithm. It's a standard algorithm used in many IP-based protocols.
+
+            The Algorithm (in plain English): You treat the entire ICMP packet (header + data) as a sequence of 16-bit integers. You sum them all up. If there's a carry-over from the sum, you add it back to the result. Finally, you perform a bitwise NOT (one's complement) on the final sum. The result is the checksum. You will have to write this function yourself.
+
+Phase 3: The Main Loop - Sending, Receiving, and Timing
+
+This phase makes your program actually do the pinging.
+
+    Sending the Packet:
+
+        Goal: Transmit your crafted ICMP packet to the destination.
+
+        What to research:
+
+            The sendto() function. It allows you to send data on a socket to a specific sockaddr destination (which you got from getaddrinfo).
+
+    Receiving the Reply:
+
+        Goal: Wait for and read the incoming "ECHO_REPLY" packet.
+
+        What to research:
+
+            The recvfrom() function. It will block and wait for data to arrive on your raw socket.
+
+            When you receive data, it will be the entire IP packet (IP header + ICMP header + data). You must parse it.
+
+            Parsing the reply: First, you'll have a pointer to a struct iphdr. You need to look at this to find where the ICMP part begins (it's right after the IP header). The IP header's ihl (Internet Header Length) field tells you its length.
+
+            Validating the reply: Once you find the ICMP header in the received packet, you must check: Is the type ICMP_ECHOREPLY? Does the id match your process's pid? This ensures you are not processing a reply meant for another ping program running on the same machine.
+
+    Timing and Timeouts:
+
+        Goal: Measure the Round-Trip Time (RTT) and handle cases where no reply is received.
+
+        What to research:
+
+            The gettimeofday() function. Call it right before sendto() to get a start time. Call it again right after recvfrom() succeeds to get the end time. The difference is your RTT. The struct timeval it uses holds seconds and microseconds.
+
+            Handling Timeouts: A ping doesn't wait forever. You must set a timeout on the socket. Research setsockopt() with the SO_RCVTIMEO option. This makes recvfrom() return an error (like EAGAIN or EWOULDBLOCK) if it doesn't receive anything within the specified time. This is the professional way to handle timeouts.
+
+    The Loop:
+
+        Goal: Put everything together to send packets repeatedly.
+
+        What to research:
+
+            A while(1) or for(;;) loop.
+
+            Inside the loop: craft packet, set sequence number, calculate checksum, get start time, sendto(), recvfrom().
+
+            After the calls, print the result (either the RTT or a timeout message).
+
+            Use sleep(1) or usleep(1000000) at the end of the loop to wait one second before sending the next packet.
+
+Phase 4: Finalization - Statistics and Graceful Exit
+
+A good program cleans up after itself and provides a summary.
+
+    Signal Handling:
+
+        Goal: Catch the Ctrl+C signal (SIGINT) to stop the loop gracefully and print statistics.
+
+        What to research:
+
+            The signal() or sigaction() functions. You'll register a handler function that will be called when the user presses Ctrl+C. This handler should set a global flag to break the main loop.
+
+    Calculating and Displaying Statistics:
+
+        Goal: At the end of the program, display a summary.
+
+        What to research:
+
+            You'll need to keep track of: packets transmitted, packets received, and a list/array of all successful RTTs.
+
+            From the list of RTTs, you can calculate min, max, average, and standard deviation (mdev).
+
+            Research the formula for standard deviation.
+
+Phase 5: Bonuses
+
+Once the mandatory part works perfectly, you can tackle bonuses.
+
+    Research getopt_long(): This is the best way to parse more complex flags like -s <size> or --ttl <value>.
+
+    For --ttl or t: Research setsockopt() with the IP_TTL option to change the Time-To-Live of outgoing packets.
+
+    For -s: Change the size of the data payload you add to your ICMP packet after the header. Remember to adjust your checksum calculation accordingly!
+
+Start with Phase 0 and work your way through methodically. Read the man pages, write small test programs, and build up your ft_ping piece by piece. Good luck
