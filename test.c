@@ -61,7 +61,8 @@ unsigned short checksum(void *b, int len) {
 }
 
 // Interrupt handler
-void intHandler(int dummy) { 
+void intHandler(int data) {
+    (void)data;
     pingloop = 0; 
 }
 
@@ -106,7 +107,9 @@ char *reverse_dns_lookup(char *ip_addr) {
 
 // Make a ping request
 void send_ping(int ping_sockfd, struct sockaddr_in *ping_addr, char *ping_dom, char *ping_ip, char *rev_host) {
-    int ttl_val = 64, msg_count = 0, i, addr_len, flag = 1, msg_received_count = 0;
+    int ttl_val = 64, msg_count = 0, flag = 1, msg_received_count = 0;
+    long unsigned int i = 0;
+    unsigned int addr_len;
     char rbuffer[128];
     struct ping_pkt pckt;
     struct sockaddr_in r_addr;
@@ -137,7 +140,6 @@ void send_ping(int ping_sockfd, struct sockaddr_in *ping_addr, char *ping_dom, c
         bzero(&pckt, sizeof(pckt));
         pckt.hdr.type = ICMP_ECHO;
         pckt.hdr.un.echo.id = getpid();
-
         for (i = 0; i < sizeof(pckt.msg) - 1; i++)
             pckt.msg[i] = i + '0';
 
@@ -187,7 +189,7 @@ void send_ping(int ping_sockfd, struct sockaddr_in *ping_addr, char *ping_dom, c
 
                         // It's a valid reply meant for us!
                         // The 'bytes from' should be the total ICMP packet size (e.g., 64)
-                        printf("%ld bytes from %s (%s): icmp_seq=%d ttl=%d time=%.3f ms\n",
+                        printf("%d bytes from %s (%s): icmp_seq=%d ttl=%d time=%.3Lf ms\n",
                                PING_PKT_S, // Calculate ICMP packet size
                                ping_dom,
                                ping_ip, 
@@ -216,8 +218,6 @@ int main(int argc, char *argv[]) {
     int sockfd;
     char *ip_addr, *reverse_hostname;
     struct sockaddr_in addr_con;
-    int addrlen = sizeof(addr_con);
-    char net_buf[NI_MAXHOST];
 
     if (argc != 2) {
         printf("\nFormat %s <address>\n", argv[0]);
@@ -231,7 +231,7 @@ int main(int argc, char *argv[]) {
     }
 
     reverse_hostname = reverse_dns_lookup(ip_addr);
-    printf("PING %s (%s) %d(%d) bytes of data.", argv[1], ip_addr, 56L, 56L + 28L);
+    printf("PING %s (%s) %ld(%ld) bytes of data.", argv[1], ip_addr, 56L, 56L + 28L);
 
     // Create a raw socket
     sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
