@@ -8,33 +8,46 @@
 #include <sys/socket.h> // For sockets
 #include <netdb.h>      // For getaddrinfo, gai_strerror
 #include <arpa/inet.h>  // For inet_ntop
+#include <unistd.h>
+#include <signal.h>
 #include <netinet/ip_icmp.h>
-#include <time.h>
+#include <sys/time.h>
+#include <errno.h>
+#include <math.h>
 
 
-#define PACKET_SIZE = 64;
-#define ICMP_MINLEN = 8
-#define RECV_TIMEOUT = 1
-#define PING_SLEEP_RATE 1000000
+#define PAYLOAD_SIZE 56
+#define PACKET_SIZE (sizeof(struct icmphdr) + PAYLOAD_SIZE)
 
-int loop = 1;
+typedef struct s_ping_stats {
+    long            packets_sent;
+    long            packets_received;
+    double          rtt_min;
+    double          rtt_max;
+    double          rtt_total;      // Sum of all RTTs for average
+    double          rtt_total_sq;   // Sum of all (RTT * RTT) for std deviation
+    struct timeval  start_time;
+    struct timeval  end_time;
+} t_ping_stats;
 
-typedef struct s_ping_data 
-{
-    char        *target_host;      // The original user input (e.g., "google.com")
-    char        resolved_ip[INET_ADDRSTRLEN]; // The resolved IP string (e.g., "142.250.184.206")
-    struct      addrinfo *addr_info;      // The full address info struct
+
+typedef struct s_ping_data {
+    char            *target_host;
+    struct addrinfo *addr_info;
+    char            resolved_ip[INET_ADDRSTRLEN];
+    t_ping_stats    stats; // Embed the stats struct
 } t_ping_data;
 
-// typedef struct p_packet
-// {
-// struct icmp *imsg; // Header
-// char msg[PACKET_SIZE - sizeof(struct icmphdr)];
-// };
 
-
+unsigned short checksum(void *addr, int len);
+void interrupt_signal(int sig);
 int DNS_LookUp(t_ping_data *pdata);
-void make_ICMP_message(uint8_t **msg, size_t *msg_len);
+int initialize_socket();
+void ping_loop(int sockfd, t_ping_data *pdata);
+void create_packet(char *packet, int seq);
+void process_reply(char *buffer, ssize_t len, struct sockaddr_storage *from_addr, socklen_t from_len, t_ping_stats *stats);
+void print_summary(char *host, t_ping_stats *stats);
+void perform_reverse_dns(struct sockaddr_storage *from_addr, socklen_t from_len, char *buffer, size_t len);
 
 
 #endif
