@@ -11,7 +11,8 @@ void interrupt_signal(int sig)
     loop = 0;
 }
 
-int DNS_LookUp(t_ping_data *pdata) {
+int DNS_LookUp(t_ping_data *pdata)
+{
     struct addrinfo hints;
     struct addrinfo *result;
 
@@ -21,7 +22,8 @@ int DNS_LookUp(t_ping_data *pdata) {
     hints.ai_protocol = IPPROTO_ICMP;
 
     int status = getaddrinfo(pdata->target_host, NULL, &hints, &result);
-    if (status != 0) {
+    if (status != 0)
+    {
         fprintf(stderr, "ft_ping: %s: %s\n", pdata->target_host, gai_strerror(status));
         return (EXIT_FAILURE);
     }
@@ -32,41 +34,37 @@ int DNS_LookUp(t_ping_data *pdata) {
     return (EXIT_SUCCESS);
 }
 
-
-
-/**
- * @brief Creates a raw socket and sets a 1-second receive timeout.
- * @return The socket file descriptor on success, -1 on failure.
- */
-int initialize_socket() 
+int initialize_socket(void) 
 {
     int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if (sockfd < 0) {
         perror("ft_ping: socket error");
-        return -1;
+        return (-1);
     }
 
     struct timeval tv_out = { .tv_sec = 1, .tv_usec = 0 };
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv_out, sizeof(tv_out)) < 0) {
         perror("ft_ping: setsockopt failed");
         close(sockfd);
-        return -1;
+        return (-1);
     }
     return sockfd;
 }
 
-void ping_loop(int sockfd, t_ping_data *pdata) {
+void ping_loop(int sockfd, t_ping_data *pdata)
+{
     // Record the start time for the entire session
     gettimeofday(&pdata->stats.start_time, NULL);
     int seq_message = 1;
 
-    while (loop) {
+    while (loop)
+    {
         char packet[PACKET_SIZE];
         create_packet(packet, seq_message);
 
-        if (sendto(sockfd, packet, PACKET_SIZE, 0, pdata->addr_info->ai_addr, pdata->addr_info->ai_addrlen) > 0) {
+        if (sendto(sockfd, packet, PACKET_SIZE, 0, pdata->addr_info->ai_addr, pdata->addr_info->ai_addrlen) > 0)
             pdata->stats.packets_sent++;
-        } else { /* ... error handling ... */ }
+        else { /* ... error handling ... */ }
 
         char recv_buffer[1024];
         
@@ -77,10 +75,10 @@ void ping_loop(int sockfd, t_ping_data *pdata) {
         ssize_t bytes_received = recvfrom(sockfd, recv_buffer, sizeof(recv_buffer), 0, 
                                           (struct sockaddr *)&from_addr, &from_len);
         
-        if (bytes_received > 0) {
+        if (bytes_received > 0)
             // Pass the reply address and stats struct for processing
-            process_reply(recv_buffer, bytes_received, &from_addr, from_len, &pdata->stats);
-        } else { /* ... error handling ... */ }
+            process_reply(recv_buffer, bytes_received, &from_addr, pdata);
+        else { /* ... error handling ... */ }
         
         seq_message++;
         if (loop) sleep(1);
@@ -88,16 +86,9 @@ void ping_loop(int sockfd, t_ping_data *pdata) {
 
     // Record the end time for the session
     gettimeofday(&pdata->stats.end_time, NULL);
-    printf("\n");
     print_summary(pdata->target_host, &pdata->stats);
 }
 
-
-/**
- * @brief Fills a buffer with a valid ICMP Echo Request packet.
- * @param packet The buffer to fill (must be at least PACKET_SIZE).
- * @param seq The sequence number for this packet.
- */
 void create_packet(char *packet, int seq) 
 {
     memset(packet, 0, PACKET_SIZE);
@@ -119,9 +110,10 @@ void create_packet(char *packet, int seq)
     ihdr->checksum = checksum(packet, PACKET_SIZE);
 }
 
-// --- Main Function (Refactored and Cleaned) ---
-int main(int ac, char *av[]) {
-    if (ac < 2) {
+int main(int ac, char *av[]) 
+{
+    if (ac < 2)
+    {
         fprintf(stderr, "ft_ping: usage error: Destination address required\n");
         return EXIT_FAILURE;
     }
@@ -129,20 +121,22 @@ int main(int ac, char *av[]) {
     t_ping_data pdata;
     memset(&pdata, 0, sizeof(pdata));
 
+    parse_arguments(ac, av, &pdata);
+
+    if (pdata.target_host == NULL) {
+        fprintf(stderr, "ft_ping: usage error: Destination address required\n");
+        return EXIT_FAILURE;
+    }
+
     pdata.stats.rtt_min = __DBL_MAX__; // Initialize min to a very large number
     pdata.stats.rtt_max = 0.0;
 
-    pdata.target_host = av[1];
-
-    if (DNS_LookUp(&pdata) != EXIT_SUCCESS) {
+    if (DNS_LookUp(&pdata))
         return EXIT_FAILURE;
-    }
 
     int sockfd = initialize_socket();
-    if (sockfd < 0) {
-        freeaddrinfo(pdata.addr_info);
-        return EXIT_FAILURE;
-    }
+    if (sockfd < 0)
+        return (freeaddrinfo(pdata.addr_info), EXIT_FAILURE);
     
     signal(SIGINT, interrupt_signal);
 
@@ -153,5 +147,5 @@ int main(int ac, char *av[]) {
 
     close(sockfd);
     freeaddrinfo(pdata.addr_info);
-    return EXIT_SUCCESS;
+    return (EXIT_SUCCESS);
 }

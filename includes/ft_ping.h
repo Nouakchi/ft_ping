@@ -32,6 +32,7 @@ typedef struct s_ping_stats {
 
 
 typedef struct s_ping_data {
+    int             opt_verbose;
     char            *target_host;
     struct addrinfo *addr_info;
     char            resolved_ip[INET_ADDRSTRLEN];
@@ -39,15 +40,20 @@ typedef struct s_ping_data {
 } t_ping_data;
 
 
-unsigned short checksum(void *addr, int len);
+void print_usage(void);
+int initialize_socket(void);
 void interrupt_signal(int sig);
 int DNS_LookUp(t_ping_data *pdata);
-int initialize_socket();
-void ping_loop(int sockfd, t_ping_data *pdata);
 void create_packet(char *packet, int seq);
-void process_reply(char *buffer, ssize_t len, struct sockaddr_storage *from_addr, socklen_t from_len, t_ping_stats *stats);
+unsigned short checksum(void *addr, int len);
+void ping_loop(int sockfd, t_ping_data *pdata);
 void print_summary(char *host, t_ping_stats *stats);
+void print_icmp_error_details(struct icmphdr *icmp_hdr);
+void parse_arguments(int ac, char *av[], t_ping_data *pdata);
+double calculate_and_update_rtt(struct timeval *tv_sent, t_ping_stats *stats);
 void perform_reverse_dns(struct sockaddr_storage *from_addr, socklen_t from_len, char *buffer, size_t len);
-
+void handle_echo_reply(char *buffer, int ip_hdr_len, struct ip *ip_hdr, struct icmphdr *icmp_hdr, t_ping_data *pdata);
+void process_reply(char *buffer, ssize_t len, struct sockaddr_storage *from_addr, t_ping_data *pdata);
+void handle_verbose_reply(char *buffer, int ip_hdr_len, struct icmphdr *icmp_hdr, struct sockaddr_storage *from_addr);
 
 #endif
