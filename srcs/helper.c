@@ -155,13 +155,25 @@ void handle_echo_reply(char *buffer, int ip_hdr_len, struct ip *ip_hdr, struct i
     inet_ntop(AF_INET, &ip_hdr->ip_src, reply_ip, sizeof(reply_ip));
     
     // Print the full, correct line
-    printf("%ld bytes from %s (%s): icmp_seq=%d ttl=%d time=%.3f ms\n",
-           ntohs(ip_hdr->ip_len) - (long)ip_hdr_len,
-           reply_host,
-           reply_ip,
-           ntohs(icmp_hdr->un.echo.sequence),
-           ip_hdr->ip_ttl,
-           rtt);
+    if (pdata->rev_dns)
+    {
+        printf("%ld bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n",
+               ntohs(ip_hdr->ip_len) - (long)ip_hdr_len,
+               reply_ip,
+               ntohs(icmp_hdr->un.echo.sequence),
+               ip_hdr->ip_ttl,
+               rtt);
+    }
+    else
+    {
+        printf("%ld bytes from %s (%s): icmp_seq=%d ttl=%d time=%.3f ms\n",
+               ntohs(ip_hdr->ip_len) - (long)ip_hdr_len,
+               reply_host,
+               reply_ip,
+               ntohs(icmp_hdr->un.echo.sequence),
+               ip_hdr->ip_ttl,
+               rtt);
+    }
 }
 
 void handle_verbose_reply(char *buffer, int ip_hdr_len, struct icmphdr *icmp_hdr, struct sockaddr_storage *from_addr)
@@ -202,14 +214,26 @@ void process_reply(char *buffer, ssize_t len, struct sockaddr_storage *from_addr
     // Dispatch to the correct handler based on the ICMP type.
     if (icmp_hdr->type == ICMP_ECHOREPLY && ntohs(icmp_hdr->un.echo.id) == getpid())
     {
-        write(1, "yes\n", 4);
         handle_echo_reply(buffer, ip_hdr_len, ip_hdr, icmp_hdr, pdata);
     }
     else if (pdata->opt_verbose)
     {
-        write(1, "nop\n", 4);
         handle_verbose_reply(buffer, ip_hdr_len, icmp_hdr, from_addr);
     }
+}
+
+int parse_value(char *ttl_val, int range)
+{
+    int i = -1;
+    if (ttl_val[0] && ttl_val[0] == '+')
+        i++;
+    while (ttl_val[++i])
+        if (ttl_val[i] < '0' || ttl_val[i] > '9')
+            return (EXIT_FAILURE);
+    int ttl = atoi(ttl_val);
+    if (ttl > range)
+        return (EXIT_FAILURE);
+    return (EXIT_SUCCESS);
 }
 
 void parse_arguments(int ac, char *av[], t_ping_data *pdata)
@@ -217,6 +241,11 @@ void parse_arguments(int ac, char *av[], t_ping_data *pdata)
     // Initialize options to default values
     pdata->opt_verbose = 0;
     pdata->target_host = NULL;
+    pdata->opt_ttl = -1;
+    pdata->rev_dns = false;
+    pdata->W_timeout = 1;
+    pdata->w_timeout = 0;
+    pdata->payload_size = 56;
 
     for (int i = 1; i < ac; i++)
     {
@@ -228,6 +257,52 @@ void parse_arguments(int ac, char *av[], t_ping_data *pdata)
             } else if (strcmp(av[i], "-?") == 0) {
                 print_usage();
                 exit(EXIT_SUCCESS);
+            } else if (strcmp(av[i], "-t") == 0) {
+                if (av[i + 1] && !parse_value(av[i + 1], 255))
+                {
+                    pdata->opt_ttl = atoi(av[i + 1]);
+                    i++;
+                }
+                else
+                {
+                    fprintf(stderr, "ft_ping: invalid argument '%s': out of range 0 <= value <= 255\n", av[i + 1]);
+                    exit(EXIT_FAILURE);
+                }
+            }  else if (strcmp(av[i], "-W") == 0) {
+                if (av[i + 1] && !parse_value(av[i + 1], 60))
+                {
+                    pdata->W_timeout = atoi(av[i + 1]);
+                    i++;
+                }
+                else
+                {
+                    fprintf(stderr, "ft_ping: invalid argument '%s': out of range 0 <= value <= 60\n", av[i + 1]);
+                    exit(EXIT_FAILURE);
+                }
+            } else if (strcmp(av[i], "-w") == 0) {
+                if (av[i + 1] && !parse_value(av[i + 1], 60))
+                {
+                    pdata->w_timeout = atoi(av[i + 1]);
+                    i++;
+                }
+                else
+                {
+                    fprintf(stderr, "ft_ping: invalid argument '%s': out of range 0 <= value <= 60\n", av[i + 1]);
+                    exit(EXIT_FAILURE);
+                }
+            } else if (strcmp(av[i], "-s") == 0) {
+                if (av[i + 1] && !parse_value(av[i + 1], 65000))
+                {
+                    pdata->payload_size = atoi(av[i + 1]);
+                    i++;
+                }
+                else
+                {
+                    fprintf(stderr, "ft_ping: invalid argument '%s': out of range 0 <= value <= 65000\n", av[i + 1]);
+                    exit(EXIT_FAILURE);
+                }
+            } else if (strcmp(av[i], "-n") == 0) {
+                pdata->rev_dns = true;
             } else {
                 fprintf(stderr, "ft_ping: invalid option -- '%s'\n", &av[i][1]);
                 print_usage();
@@ -250,6 +325,11 @@ void print_usage(void)
 {
     printf("Usage: ft_ping [options] <destination>\n\n");
     printf("Options:\n");
-    printf("  -v        verbose output\n");
-    printf("  -?        show this help message and exit\n");
+    printf("  -v            verbose output\n");
+    printf("  -t <ttl>      define Time To Live\n");
+    printf("  -n            no dns name resolution\n");
+    printf("  -W <timeout>  time to wait for response\n");
+    printf("  -w <deadline> reply wait <deadline> in seconds\n");
+    printf("  -s <size>     use <size> as number of data bytes to be sent\n");
+    printf("  -?            show this help message and exit\n");
 }

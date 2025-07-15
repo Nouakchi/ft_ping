@@ -14,10 +14,9 @@
 #include <sys/time.h>
 #include <errno.h>
 #include <math.h>
+#include <stdbool.h>
 
 
-#define PAYLOAD_SIZE 56
-#define PACKET_SIZE (sizeof(struct icmphdr) + PAYLOAD_SIZE)
 
 typedef struct s_ping_stats {
     long            packets_sent;
@@ -33,6 +32,11 @@ typedef struct s_ping_stats {
 
 typedef struct s_ping_data {
     int             opt_verbose;
+    int             opt_ttl;
+    bool            rev_dns;
+    int             W_timeout;
+    int             w_timeout;
+    unsigned int    payload_size;
     char            *target_host;
     struct addrinfo *addr_info;
     char            resolved_ip[INET_ADDRSTRLEN];
@@ -41,10 +45,10 @@ typedef struct s_ping_data {
 
 
 void print_usage(void);
-int initialize_socket(void);
+int initialize_socket(t_ping_data *pdata);
 void interrupt_signal(int sig);
 int DNS_LookUp(t_ping_data *pdata);
-void create_packet(char *packet, int seq);
+void create_packet(char *packet, int seq, unsigned int payload_size);
 unsigned short checksum(void *addr, int len);
 void ping_loop(int sockfd, t_ping_data *pdata);
 void print_summary(char *host, t_ping_stats *stats);
